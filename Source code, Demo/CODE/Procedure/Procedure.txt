@@ -1,0 +1,140 @@
+--Procedure Tạo cập nhật khi người dùng nhập mới dữ liệu
+
+GO
+CREATE PROC MODIF_DS_ND 
+    @MaND INT, 
+    @TenND VARCHAR(50) = NULL, 
+    @Email VARCHAR(100) = NULL, 
+    @MK VARCHAR(100) = NULL
+AS
+BEGIN
+    BEGIN TRY
+        -- Kiểm tra xem MaND có tồn tại hay không
+        IF NOT EXISTS (SELECT 1 FROM NguoiDung WHERE MaND = @MaND)
+        BEGIN
+            PRINT N'Không tìm thấy mã người dùng hợp lệ'
+            RETURN 0
+        END
+        
+        -- Biến lưu trữ câu lệnh SQL động
+        DECLARE @SQL NVARCHAR(MAX) = 'UPDATE NguoiDung SET ';
+        DECLARE @First BIT = 1;
+        
+        -- Thêm các trường cần cập nhật vào câu lệnh SQL động
+        IF @TenND IS NOT NULL
+        BEGIN
+            SET @SQL = @SQL + 'TenND = @TenND';
+            SET @First = 0;
+        END
+        
+        IF @Email IS NOT NULL
+        BEGIN
+            IF @First = 0 SET @SQL = @SQL + ', ';
+            SET @SQL = @SQL + 'Email = @Email';
+            SET @First = 0;
+        END
+        
+        IF @MK IS NOT NULL
+        BEGIN
+            IF @First = 0 SET @SQL = @SQL + ', ';
+            SET @SQL = @SQL + 'MK = @MK';
+        END
+        
+        SET @SQL = @SQL + ' WHERE MaND = @MaND';
+        
+        -- Thực thi câu lệnh SQL động
+        EXEC sp_executesql @SQL, 
+            N'@MaND INT, @TenND VARCHAR(50), @Email VARCHAR(100), @MK VARCHAR(100)', 
+            @MaND = @MaND, 
+            @TenND = @TenND, 
+            @Email = @Email, 
+            @MK = @MK;
+        
+        PRINT N'Cập nhật dữ liệu thành công'
+        RETURN 1
+    END TRY
+    BEGIN CATCH
+        -- Lấy thông tin lỗi chi tiết
+        DECLARE @ErrorMessage NVARCHAR(4000);
+        DECLARE @ErrorSeverity INT;
+        DECLARE @ErrorState INT;
+
+        SELECT 
+            @ErrorMessage = ERROR_MESSAGE(),
+            @ErrorSeverity = ERROR_SEVERITY(),
+            @ErrorState = ERROR_STATE();
+
+        PRINT N'Đã xảy ra lỗi khi cập nhật dữ liệu: ' + @ErrorMessage;
+        RETURN -1
+    END CATCH
+END
+GO
+
+-- Procedure Nhập thêm dữ liệu mới của người dùng
+GO
+CREATE PROC INS_DS_ND @MaND INT, @TenND VARCHAR(50), @Email VARCHAR(50), @MK VARCHAR(100), @NgaySinh DATE, @GT VARCHAR(50)
+AS
+BEGIN
+	IF EXISTS( SELECT *
+					FROM NguoiDung
+					WHERE MaND = @MaND)
+		BEGIN
+			PRINT N'Đã có người dùng hợp lệ'
+			RETURN 0
+		END
+	ELSE 
+		BEGIN
+			INSERT INTO NguoiDung VALUES(@MaND,@TenND,@Email,@MK,@NgaySinh,@GT)
+			PRINT N'Thêm dữ liệu thành công'
+			RETURN 1
+		END
+END
+
+-- Procedure Thêm mới dữ liệu sức khoẻ
+
+CREATE PROC INS_DS_SK @MaDL INT, @MaND INT, @HD VARCHAR(30), @NgayGN DATE, @ChieuCao DECIMAL(5,2), @CanNang DECIMAL(5,2)
+AS
+BEGIN
+	IF NOT EXISTS( SELECT *
+					FROM NguoiDung
+					WHERE MaND = @MaND)
+		BEGIN
+			PRINT N'Không có người dùng hợp lệ'
+			RETURN 0
+		END
+	ELSE 
+		BEGIN
+			INSERT INTO DuLieuSK VALUES(@MaDL, @MaND, @HD ,@NgayGN, @ChieuCao, @CanNang, NULL)
+			PRINT N'Thêm dữ liệu thành công'
+			RETURN 1
+		END
+END
+
+-- Procedure Xoá dữ liệu liên quan tới người dùng
+
+GO
+CREATE PROC DEL_DS_ND @MaND INT
+AS
+BEGIN
+	IF EXISTS( SELECT *
+					FROM NguoiDung
+					WHERE MaND = @MaND)
+		BEGIN
+			SET NOCOUNT ON;
+			DELETE FROM DuLieuSK WHERE MaND = @MaND
+			DELETE FROM BT_ND WHERE MaND = @MaND
+			DELETE FROM MucTieu WHERE MaND = @MaND
+	
+			DELETE FROM NguoiDung WHERE MaND = @MaND
+			PRINT N'Đã xoá người dùng khỏi hệ thống'		
+			RETURN 1
+		END
+	ELSE 
+		BEGIN
+			PRINT N'Không tìm thấy dữ liệu mã người dùng thích hợp'
+			RETURN 0
+		END
+END
+
+
+

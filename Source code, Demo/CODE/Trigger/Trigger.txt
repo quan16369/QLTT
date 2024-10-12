@@ -1,0 +1,133 @@
+--Trigger tự động cập nhật TinhTrang dựa trên BMI khi thêm dữ liệu mới vào bảng DuLieuSK
+
+CREATE TRIGGER Update_TinhTrang_DuLieuSK
+ON DuLieuSK
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    -- Cập nhật trường BMI và TinhTrang dựa trên các dữ liệu mới được chèn hoặc cập nhật
+    UPDATE d
+    SET d.TinhTrang = 
+        CASE 
+            WHEN (d.CanNang / POWER(d.ChieuCao , 2)) < 16 THEN 'gay do III'
+            WHEN (d.CanNang / POWER(d.ChieuCao, 2)) BETWEEN 16 AND 16.9 THEN 'gay do II'
+            WHEN (d.CanNang / POWER(d.ChieuCao, 2)) BETWEEN 17 AND 17.9 THEN 'gay do I'
+            WHEN (d.CanNang / POWER(d.ChieuCao, 2)) BETWEEN 18.5 AND 24.9 THEN 'binh thuong'
+            WHEN (d.CanNang / POWER(d.ChieuCao, 2)) BETWEEN 25 AND 29.9 THEN 'thua can'
+            WHEN (d.CanNang / POWER(d.ChieuCao, 2)) BETWEEN 30 AND 34.9 THEN 'beo phi do I'
+            WHEN (d.CanNang / POWER(d.ChieuCao, 2)) BETWEEN 35 AND 39.9 THEN 'beo phi do II'
+            ELSE 'beo phi do III'
+        END
+    FROM DuLieuSK d
+    INNER JOIN INSERTED i ON d.MaDL = i.MaDL;
+END;
+
+-- Trigger tự động cập nhật DatDuoc dựa  trên Ten_MT và ThoiHan 
+CREATE TRIGGER Update_DatDuoc_DuLieuSK
+ON DuLieuSK
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    -- Cập nhật cột DatDuoc trong bảng MucTieu cho mục tiêu giảm cân
+    UPDATE MucTieu
+    SET DatDuoc = '1'
+    FROM MucTieu m
+    INNER JOIN DuLieuSK d ON m.MaND = d.MaND
+    WHERE m.TenMT = 'giam can'
+      AND m.ThoiHan = d.NgayGN
+      AND d.CanNang < (
+          SELECT TOP 1 CanNang
+          FROM DuLieuSK
+          WHERE MaND = m.MaND
+          ORDER BY NgayGN ASC
+      )
+	  AND m.DatDuoc = '0'
+    
+    -- Cập nhật cột DatDuoc trong bảng MucTieu cho mục tiêu giữ cân
+    UPDATE MucTieu
+    SET DatDuoc = '1'
+    FROM MucTieu m
+    INNER JOIN DuLieuSK d ON m.MaND = d.MaND
+    WHERE m.TenMT = 'giu can'
+      AND m.ThoiHan = d.NgayGN
+      AND d.CanNang = (
+          SELECT TOP 1 CanNang
+          FROM DuLieuSK
+          WHERE MaND = m.MaND
+          ORDER BY NgayGN ASC
+      )
+	   AND m.DatDuoc = '0'
+
+    -- Cập nhật cột DatDuoc trong bảng MucTieu cho mục tiêu tăng cân
+    UPDATE MucTieu
+    SET DatDuoc = '1'
+    FROM MucTieu m
+    INNER JOIN DuLieuSK d ON m.MaND = d.MaND
+    WHERE m.TenMT = 'tang can'
+      AND m.ThoiHan = d.NgayGN
+      AND d.CanNang > (
+          SELECT TOP 1 CanNang
+          FROM DuLieuSK
+          WHERE MaND = m.MaND
+          ORDER BY NgayGN ASC
+      )
+	  AND m.DatDuoc = '0'
+    
+END;
+
+--Trigger kiểm tra ngày sinh với ngày ghi nhận
+CREATE TRIGGER KT_NS_NGN  ON DuLieuSK
+FOR INSERT,UPDATE
+AS
+BEGIN
+	DECLARE @MAND INT,@NS DATE,@NGN DATE
+
+		SELECT @NGN = NgayGN
+		FROM DuLieuSK
+
+		SELECT @NS = NgaySinh
+		FROM NguoiDung
+		WHERE @MAND = MaND
+
+	IF (@NS>@NGN)
+		BEGIN
+			PRINT N'LỖI NGÀY SINH LỚN HƠN NGÀY GHI NHẬN '
+			ROLLBACK TRANSACTION
+		END
+	ELSE
+		BEGIN
+			PRINT N'CẬP NHẬT DỮ LIỆU THÀNH CÔNG'
+		END
+END
+
+-- Trigger ThoiHan phải lớn hơn hoặc bằng NgayGN
+CREATE TRIGGER KT_NGN_TH_MT
+ON MucTieu
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM inserted i
+        JOIN DuLieuSK d ON i.MaND = d.MaND
+        WHERE i.ThoiHan < d.NgayGN
+    )
+    BEGIN
+        PRINT N'ThoiHan phải lớn hơn hoặc bằng NgayGN.'
+        ROLLBACK TRANSACTION
+    END
+END;
+
+-- Trigger tính caloTH = CaloTH_BT*TGThucHien*60
+CREATE TRIGGER Update_CALO ON BT_ND
+AFTER INSERT,UPDATE 
+AS 
+BEGIN
+
+UPDATE BT_ND
+SET CaloTH  = cast((TGThucHien)as float) * bt.CaloTH_BT *60
+FROM BT_ND
+    INNER JOIN BaiTap bt ON BT_ND.MaBT = bt.MaBT
+    WHERE BT_ND.MaBT IN (SELECT MaBT FROM inserted)
+END;
+

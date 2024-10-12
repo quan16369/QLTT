@@ -1,0 +1,76 @@
+--Cursor để duyệt qua dữ liệu sức khỏe của người dùng và tạo báo cáo phản hồi.
+
+-- Tạo stored procedure
+
+CREATE PROCEDURE SucKhoe_ND
+AS
+BEGIN
+    -- Tạo bảng tạm để lưu trữ kết quả
+    CREATE TABLE #HealthReport (
+        MaND INT,
+        TenND VARCHAR(50),
+        NgaySinh DATE,
+        GT VARCHAR(10),
+        HD VARCHAR(30),
+        NgayGN DATE,
+        ChieuCao DECIMAL(5, 2),
+        CanNang DECIMAL(5, 2),
+        TinhTrang VARCHAR(30),
+    );
+
+    -- Khai báo các biến cần thiết
+    DECLARE @MaND INT;
+    DECLARE @TenND VARCHAR(50);
+    DECLARE @NgaySinh DATE;
+    DECLARE @GT VARCHAR(10);
+    DECLARE @HD VARCHAR(30);
+    DECLARE @NgayGN DATE;
+    DECLARE @ChieuCao DECIMAL(5, 2);
+    DECLARE @CanNang DECIMAL(5, 2);
+    DECLARE @TinhTrang VARCHAR(30);
+
+    -- Khai báo con trỏ để duyệt qua dữ liệu sức khỏe của người dùng
+    DECLARE health_cursor CURSOR FOR
+    SELECT 
+        nd.MaND, nd.TenND, nd.NgaySinh, nd.GT, 
+        dls.HD, dls.NgayGN, dls.ChieuCao, dls.CanNang, 
+        dls.TinhTrang
+    FROM 
+        NguoiDung nd
+    JOIN 
+        DuLieuSK dls ON nd.MaND = dls.MaND
+    ORDER BY 
+        nd.MaND, dls.NgayGN;
+
+    -- Mở con trỏ
+    OPEN health_cursor;
+
+    -- Lấy hàng đầu tiên từ con trỏ
+    FETCH NEXT FROM health_cursor INTO @MaND, @TenND, @NgaySinh, @GT, @HD, @NgayGN, @ChieuCao, @CanNang, @TinhTrang;
+
+    -- Vòng lặp duyệt qua các hàng của con trỏ
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+        -- Thêm dòng dữ liệu vào bảng kết quả tạm thời
+        INSERT INTO #HealthReport (MaND, TenND, NgaySinh, GT, HD, NgayGN, ChieuCao, CanNang, TinhTrang)
+        VALUES (@MaND, @TenND, @NgaySinh, @GT, @HD, @NgayGN, @ChieuCao, @CanNang, @TinhTrang);
+
+        -- Lấy hàng tiếp theo từ con trỏ
+        FETCH NEXT FROM health_cursor INTO @MaND, @TenND, @NgaySinh, @GT, @HD, @NgayGN, @ChieuCao, @CanNang, @TinhTrang;
+    END
+
+    -- Đóng con trỏ
+    CLOSE health_cursor;
+    -- Giải phóng tài nguyên của con trỏ
+    DEALLOCATE health_cursor;
+
+    -- Trả về kết quả từ bảng tạm
+    SELECT * FROM #HealthReport;
+
+    -- Xóa bảng tạm
+    DROP TABLE #HealthReport;
+END;
+
+EXEC SucKhoe_ND
+
+
